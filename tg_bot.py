@@ -12,8 +12,10 @@ logger = logging.getLogger('quiz_boy_logger')
 
 
 def start(bot, update):
-    custom_keyboard = [['Новый вопрос', 'Сдаться'], ['Мой счёт']]
-    update.message.reply_text(ReplyKeyboardMarkup(custom_keyboard, resize_keyboard=True))
+    reply_keyboard = [['Новый вопрос', 'Сдаться'], ['Мой счет']]
+    update.message.reply_text('Привет, там внизу кнопки!',
+                              reply_markup=ReplyKeyboardMarkup(
+                                  reply_keyboard, resize_keyboard=True))
 
 
 def help(bot, update):
