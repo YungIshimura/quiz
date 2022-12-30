@@ -1,4 +1,4 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 from telegram import ReplyKeyboardMarkup, Update
 import logging
 from environs import Env
@@ -8,7 +8,7 @@ from functools import partial
 import redis
 
 
-logger = logging.getLogger('quiz_boy_logger')
+QUESTION, ANSWER = range(2)
 
 
 def start(bot, update):
@@ -17,36 +17,40 @@ def start(bot, update):
                               reply_markup=ReplyKeyboardMarkup(
                                   reply_keyboard, resize_keyboard=True))
 
-
-def help(bot, update):
-    update.message.reply_text('Напиши /start, появятся кнопки, а там уже понятно)')
+    return QUESTION
 
 
-def handle_quiz_commands(bot, update, redis_db, quiz):
+def handle_new_question_request(bot, update, redis_db, quiz):
     user_id = update.effective_user.id
-    if update.message.text == 'Новый вопрос':
-        question = choice(list(quiz))
-        redis_db.set(name=user_id, value=question)
-        update.message.reply_text(question)
-        return
-    
-    if update.message.text == 'Сдаться':
-        return
+    question = choice(list(quiz.keys()))
+    redis_db.set(name=user_id, value=question)
+    update.message.reply_text(question)
+    return ANSWER
 
-    if update.message.text == 'Мой счёт':
-        pass
 
+def handle_solution_attempt(bot, update, redis_db, quiz):
+    user_id = update.effective_user.id
     correct_answer = quiz.get(redis_db.get(user_id), "")
     if update.message.text.lower() == correct_answer.lower():
         update.message.reply_text('Правильно! Поздравляю!')
-        return
-    update.message.reply_text('Неправильно… Попробуешь ещё раз?')
+
+        return QUESTION
+    else:
+        update.message.reply_text('Неправильно… Попробуешь ещё раз?')
+
+        return ANSWER
 
 
-    
+def done(update, context):
 
-def error(bot, update, error):
-    logger.warning('Update "%s" caused error "%s"', update, error)
+    user_data = context.user_data
+
+    update.message.reply_text(
+        'Возвращайтесь еще!',
+    )
+
+    user_data.clear()
+    return ConversationHandler.END
 
 
 def main():
@@ -66,26 +70,38 @@ def main():
 
     quiz = quiz = get_quiz('quiz_items')
 
-    quiz_handler = partial(
-        handle_quiz_commands,
+    question_request = partial(
+        handle_new_question_request,
         redis_db=bot_redis_db,
         quiz=quiz
     )
-
+    solution_attempt = partial(
+        handle_solution_attempt,
+        bot_db=bot_redis_db,
+        quiz=quiz,
+    )
     updater = Updater(tg_token)
 
     dp = updater.dispatcher
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help))
-
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, quiz_handler))
-
-    dp.add_error_handler(error)
+    conversation_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            QUESTION: [
+                MessageHandler(Filters.regex('^Новый вопрос$'), question_request)
+            ],
+            ANSWER: [
+                MessageHandler(Filters.text, solution_attempt),
+            ]
+        },
+        fallbacks=[CommandHandler("start", start)]
+    )
+    dp.add_handler(conversation_handler)
 
     updater.start_polling()
 
     updater.idle()
+
 
 if __name__ == '__main__':
     main()
