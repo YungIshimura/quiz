@@ -13,7 +13,7 @@ class Status(Enum):
     ANSWER = auto()
 
 
-def start(bot, update):
+def start(update, context):
     reply_keyboard = [['Новый вопрос', 'Сдаться'], ['Мой счет']]
     update.message.reply_text('Привет, там внизу кнопки!',
                               reply_markup=ReplyKeyboardMarkup(
@@ -22,15 +22,16 @@ def start(bot, update):
     return Status.QUESTION
 
 
-def handle_new_question_request(bot, update, redis_db, quiz):
+def handle_new_question_request(update, context, redis_db, quiz):
     user_id = update.effective_user.id
     question = choice(list(quiz.keys()))
     redis_db.set(name=user_id, value=question)
     update.message.reply_text(question)
+
     return Status.ANSWER
 
 
-def handle_solution_attempt(bot, update, redis_db, quiz):
+def handle_solution_attempt(update, context, redis_db, quiz):
     user_id = update.effective_user.id
     correct_answer = quiz.get(redis_db.get(user_id), "")
     if update.message.text.lower() == correct_answer.lower():
@@ -43,7 +44,7 @@ def handle_solution_attempt(bot, update, redis_db, quiz):
         return Status.ANSWER
 
 
-def handle_surrender(update, bot, redis_db, quiz):
+def handle_surrender(update, context, redis_db, quiz):
     user_id = update.effective_user.id
     correct_answer = quiz.get(redis_db.get(user_id), "")
     update.message.reply_text(f'Правильный ответ:\n{correct_answer}')
@@ -75,12 +76,12 @@ def main():
     )
     solution_attempt = partial(
         handle_solution_attempt,
-        bot_db=bot_redis_db,
+        redis_db=bot_redis_db,
         quiz=quiz,
     )
     surrender = partial(
         handle_surrender,
-        bot_db=bot_redis_db,
+        redis_db=bot_redis_db,
         quiz=quiz,
     )
 
