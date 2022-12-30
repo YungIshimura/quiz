@@ -17,5 +17,4 @@ def get_quiz(folder_name):
     return quiz
 
 if __name__ == "__main__":
-    a=get_quiz("quiz_items")
-    print(a)
+    get_quiz("quiz_items")

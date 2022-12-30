@@ -67,7 +67,7 @@ def main():
         decode_responses=True
     )
 
-    quiz = quiz = get_quiz('quiz_items')
+    quiz = get_quiz('quiz_items')
 
     question_request = partial(
         handle_new_question_request,

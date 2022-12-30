@@ -74,7 +74,7 @@ if __name__ == "__main__":
         password=redis_password,
         decode_responses=True,
     )
-    quiz = quiz = get_quiz('quiz_items')
+    quiz = get_quiz('quiz_items')
 
     vk_token = env("VK_API_KEY")
     vk_session = vk.VkApi(token=vk_token)
