@@ -1,6 +1,6 @@
+from enum import Enum, auto
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 from telegram import ReplyKeyboardMarkup, Update
-import logging
 from environs import Env
 from quiz import get_quiz
 from random import choice
@@ -8,7 +8,9 @@ from functools import partial
 import redis
 
 
-QUESTION, ANSWER = range(2)
+class Status(Enum):
+    QUESTION = auto()
+    ANSWER = auto()
 
 
 def start(bot, update):
@@ -17,7 +19,7 @@ def start(bot, update):
                               reply_markup=ReplyKeyboardMarkup(
                                   reply_keyboard, resize_keyboard=True))
 
-    return QUESTION
+    return Status.QUESTION
 
 
 def handle_new_question_request(bot, update, redis_db, quiz):
@@ -25,7 +27,7 @@ def handle_new_question_request(bot, update, redis_db, quiz):
     question = choice(list(quiz.keys()))
     redis_db.set(name=user_id, value=question)
     update.message.reply_text(question)
-    return ANSWER
+    return Status.ANSWER
 
 
 def handle_solution_attempt(bot, update, redis_db, quiz):
@@ -34,23 +36,19 @@ def handle_solution_attempt(bot, update, redis_db, quiz):
     if update.message.text.lower() == correct_answer.lower():
         update.message.reply_text('Правильно! Поздравляю!')
 
-        return QUESTION
+        return Status.QUESTION
     else:
         update.message.reply_text('Неправильно… Попробуешь ещё раз?')
 
-        return ANSWER
+        return Status.ANSWER
 
 
-def done(update, context):
+def handle_surrender(update, bot, redis_db, quiz):
+    user_id = update.effective_user.id
+    correct_answer = quiz.get(redis_db.get(user_id), "")
+    update.message.reply_text(f'Правильный ответ:\n{correct_answer}')
 
-    user_data = context.user_data
-
-    update.message.reply_text(
-        'Возвращайтесь еще!',
-    )
-
-    user_data.clear()
-    return ConversationHandler.END
+    return Status.QUESTION
 
 
 def main():
@@ -80,6 +78,12 @@ def main():
         bot_db=bot_redis_db,
         quiz=quiz,
     )
+    surrender = partial(
+        handle_surrender,
+        bot_db=bot_redis_db,
+        quiz=quiz,
+    )
+
     updater = Updater(tg_token)
 
     dp = updater.dispatcher
@@ -87,11 +91,21 @@ def main():
     conversation_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            QUESTION: [
-                MessageHandler(Filters.regex('^Новый вопрос$'), question_request)
+            Status.QUESTION: [
+                MessageHandler(
+                    Filters.regex('Новый вопрос'),
+                    question_request
+                ),
             ],
-            ANSWER: [
-                MessageHandler(Filters.text, solution_attempt),
+            Status.ANSWER: [
+                MessageHandler(
+                    Filters.regex('Сдаться'),
+                    surrender
+                ),
+                MessageHandler(
+                    Filters.text & ~Filters.command,
+                    solution_attempt
+                ),
             ]
         },
         fallbacks=[CommandHandler("start", start)]
